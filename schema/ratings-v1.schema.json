@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yeixio/yggdrasil-ratings/schema/ratings-v1.schema.json",
+  "title": "Yggdrasil community model ratings aggregate snapshot, version 1",
+  "description": "Public aggregates: no per-person records. A cohort appears only with at least min_ratings ratings; exact-hardware cohorts are never published.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "prior", "weight", "min_ratings", "models"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "prior": {"type": "number", "minimum": 1, "maximum": 5, "description": "The mean weighted scores lean toward."},
+    "weight": {"type": "integer", "minimum": 0, "description": "How many ratings' worth the prior counts for: weighted_score = (weight × prior + sum of stars) / (weight + ratings)."},
+    "min_ratings": {"type": "integer", "minimum": 1},
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["model", "format", "quantization", "runtime", "backend", "cohorts"],
+        "properties": {
+          "model": {"type": "string"},
+          "format": {"type": "string"},
+          "quantization": {"type": "string"},
+          "runtime": {"type": "string"},
+          "backend": {"type": "string"},
+          "cohorts": {"type": "array", "items": {"$ref": "#/$defs/stats"}}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "stats": {
+      "type": "object", "additionalProperties": false,
+      "required": ["tier", "ratings", "average", "weighted_score", "confidence"],
+      "properties": {
+        "tier": {"enum": ["exact", "family", "class", "backend", "global"]},
+        "cohort": {"type": "string", "description": "family vendor:family, class vendor:class:memory_bucket, backend backend:memory_bucket; absent for global."},
+        "ratings": {"type": "integer", "minimum": 1},
+        "average": {"type": "number", "minimum": 1, "maximum": 5},
+        "weighted_score": {"type": "number", "minimum": 1, "maximum": 5},
+        "confidence": {"enum": ["limited", "early", "community"]},
+        "tags": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}},
+        "observed": {"type": "integer", "minimum": 0},
+        "median_tokens_per_second": {"type": "number", "minimum": 0},
+        "median_ttft_ms": {"type": "number", "minimum": 0},
+        "successful_start_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "crash_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "out_of_memory_rate": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  }
+}

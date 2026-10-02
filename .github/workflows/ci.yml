@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Formatting
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - run: go test -race ./...
+      - uses: golangci/golangci-lint-action@v9
+      - name: Schemas are valid JSON
+        run: for f in schema/*.json; do python3 -m json.tool "$f" > /dev/null; done
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t yggdrasil-ratings:ci .
+      - name: The image starts and answers
+        run: |
+          docker run -d --name r -p 8080:8080 -e RATINGS_SECRET=ci-secret-ci-secret-ci-secret-ci yggdrasil-ratings:ci
+          for i in $(seq 1 20); do curl -sf localhost:8080/healthz && exit 0; sleep 1; done
+          docker logs r; exit 1

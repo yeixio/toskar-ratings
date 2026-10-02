@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yeixio/yggdrasil-ratings/schema/rating-v1.schema.json",
+  "title": "Yggdrasil community model rating, version 1",
+  "description": "What Yggdrasil sends when a person chooses to share a rating. No names, addresses, prompts, responses, or files.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "client_id", "model", "runtime", "hardware", "stars"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "client_id": {"type": "string", "pattern": "^[a-f0-9]{32,64}$", "description": "Random, made once per installation; never derived from hardware."},
+    "model": {
+      "type": "object", "additionalProperties": false, "required": ["id", "format", "quantization"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{1,99}$", "description": "Base model slug, such as qwen2.5-coder-7b-instruct."},
+        "format": {"enum": ["gguf", "mlx", "safetensors", "onnx"]},
+        "quantization": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9_.-]{0,23}$"}
+      }
+    },
+    "runtime": {
+      "type": "object", "additionalProperties": false, "required": ["type", "backend"],
+      "properties": {
+        "type": {"enum": ["llamacpp", "mlx", "vllm", "ollama", "external"]},
+        "backend": {"enum": ["metal", "cuda", "rocm", "vulkan", "sycl", "cpu"]},
+        "version": {"type": "string", "pattern": "^[0-9A-Za-z.+-]{1,32}$"}
+      }
+    },
+    "hardware": {
+      "type": "object", "additionalProperties": false,
+      "required": ["platform", "architecture", "vendor", "family", "memory_type", "memory_bucket_gb"],
+      "properties": {
+        "platform": {"enum": ["macos", "linux", "windows"]},
+        "architecture": {"enum": ["arm64", "amd64"]},
+        "vendor": {"enum": ["apple", "nvidia", "amd", "intel", "cpu"]},
+        "family": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,39}$", "description": "Accelerator model, such as m4-max or rtx-4090; for cpu, the CPU vendor."},
+        "memory_type": {"enum": ["unified", "dedicated", "system"]},
+        "memory_bucket_gb": {"enum": ["0-8", "8-16", "16-32", "32-64", "64-128", "128+"]}
+      }
+    },
+    "stars": {"type": "integer", "minimum": 1, "maximum": 5},
+    "tags": {
+      "type": "array", "uniqueItems": true, "maxItems": 10,
+      "items": {"enum": ["great_responses", "fast", "slow", "stable", "crashed", "too_much_memory", "great_for_coding", "great_for_chat", "good_tool_use", "poor_tool_use"]}
+    },
+    "observations": {
+      "type": "object", "additionalProperties": false,
+      "description": "Optional, shared only when the person agrees.",
+      "properties": {
+        "tokens_per_second": {"type": "number", "minimum": 0, "maximum": 10000},
+        "ttft_ms": {"type": "integer", "minimum": 0, "maximum": 600000},
+        "starts": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "start_failures": {"type": "integer", "minimum": 0},
+        "crashed": {"type": "boolean"},
+        "out_of_memory": {"type": "boolean"},
+        "context_band": {"enum": ["0-8k", "8-32k", "32-128k", "128k+"]}
+      }
+    },
+    "app_version": {"type": "string", "pattern": "^[0-9A-Za-z.+-]{1,32}$"}
+  }
+}
