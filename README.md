@@ -22,7 +22,7 @@ Scores are confidence-weighted, so one 5-star rating does not outrank hundreds o
 
 ## Privacy
 
-Yggdrasil asks before sending anything. A rating carries the stars, the tags, the model configuration, and a hardware class such as "Apple M4 Max, 32–64 GB". Observations are sent only if the person allows them.
+Yggdrasil asks before sending anything. A rating carries the stars, the tags, the model configuration, and a hardware class such as "Apple M4 Max, 32–64 GB". Observations are sent only if the person allows them, and so is the language they used the model in, such as `es`.
 
 Never sent or stored:
 - prompts, responses, or files;
@@ -30,14 +30,14 @@ Never sent or stored:
 
 The `client_id` is random, made once per installation, and lets a person update or delete their own rating. The service stores only a keyed hash of it. Addresses are used only for rate limits and batch tags, never stored: a batch tag is the hour plus a keyed hash of the network prefix, so an abusive flood can be found and invalidated.
 
-The public aggregates have no per-person records. A cohort is published only with at least 3 ratings, and exact-hardware cohorts are never published. A daily snapshot goes to [yeixio/yggdrasil-model-data](https://github.com/yeixio/yggdrasil-model-data).
+The public aggregates have no per-person records. A cohort is published only with at least 3 ratings, and exact-hardware cohorts are never published. Ratings by language are published per model configuration, with the same minimum, and never split by hardware. A daily snapshot goes to [yeixio/yggdrasil-model-data](https://github.com/yeixio/yggdrasil-model-data).
 
 ## API
 
 | Method | Path | |
 | --- | --- | --- |
 | POST | `/v1/ratings` | Submit a rating ([schema](schema/rating-v1.schema.json)). Rating the same configuration again from the same `client_id` updates the rating. Returns `{key, created}`. |
-| PUT | `/v1/ratings/{key}` | Change stars, tags, or observations: `{client_id, stars, tags, observations}` |
+| PUT | `/v1/ratings/{key}` | Change stars, tags, observations, or language: `{client_id, stars, tags, observations, language}` |
 | DELETE | `/v1/ratings/{key}` | Delete a rating; header `X-Ratings-Client: <client_id>` |
 | GET | `/v1/models/{model}/ratings?format=&quantization=&runtime=&backend=&hardware=` | One configuration's stats at every tier, narrowest first. `hardware` is the exact cohort key; without it, only the global tier is returned. |
 | GET | `/v1/aggregates` | The public snapshot ([schema](schema/ratings-v1.schema.json)) |

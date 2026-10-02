@@ -23,12 +23,24 @@
           "quantization": {"type": "string"},
           "runtime": {"type": "string"},
           "backend": {"type": "string"},
-          "cohorts": {"type": "array", "items": {"$ref": "#/$defs/stats"}}
+          "cohorts": {"type": "array", "items": {"$ref": "#/$defs/stats"}},
+          "languages": {"type": "array", "description": "Ratings by the language the model was used in, each with at least min_ratings ratings; never split by hardware.", "items": {"$ref": "#/$defs/language_stats"}}
         }
       }
     }
   },
   "$defs": {
+    "language_stats": {
+      "type": "object", "additionalProperties": false,
+      "required": ["language", "ratings", "average", "weighted_score", "confidence"],
+      "properties": {
+        "language": {"type": "string", "pattern": "^([a-z]{2,3}|zh-Hans|zh-Hant)$"},
+        "ratings": {"type": "integer", "minimum": 1},
+        "average": {"type": "number", "minimum": 1, "maximum": 5},
+        "weighted_score": {"type": "number", "minimum": 1, "maximum": 5},
+        "confidence": {"enum": ["limited", "early", "community"]}
+      }
+    },
     "stats": {
       "type": "object", "additionalProperties": false,
       "required": ["tier", "ratings", "average", "weighted_score", "confidence"],

@@ -177,6 +177,43 @@ type ModelAggregate struct {
 	Runtime      string  `json:"runtime"`
 	Backend      string  `json:"backend"`
 	Cohorts      []Stats `json:"cohorts"`
+	// Languages are the configuration's ratings by the language it was used
+	// in, each only with MinPublic ratings, and never split by hardware.
+	Languages []LanguageStats `json:"languages,omitempty"`
+}
+
+// LanguageStats are a configuration's ratings given for one language.
+type LanguageStats struct {
+	Language      string  `json:"language"`
+	Ratings       int     `json:"ratings"`
+	Average       float64 `json:"average"`
+	WeightedScore float64 `json:"weighted_score"`
+	Confidence    string  `json:"confidence"`
+}
+
+// byLanguage summarizes the ratings that give a language, per language,
+// leaving out languages with fewer than MinPublic ratings.
+func byLanguage(rows []store.Row, prior float64) []LanguageStats {
+	by := map[string][]store.Row{}
+	for _, r := range rows {
+		if r.Language != "" {
+			by[r.Language] = append(by[r.Language], r)
+		}
+	}
+	langs := make([]string, 0, len(by))
+	for l := range by {
+		langs = append(langs, l)
+	}
+	sort.Strings(langs)
+	var out []LanguageStats
+	for _, l := range langs {
+		if len(by[l]) < MinPublic {
+			continue
+		}
+		s := Summarize(schema.TierGlobal, "", by[l], prior)
+		out = append(out, LanguageStats{Language: l, Ratings: s.Ratings, Average: s.Average, WeightedScore: s.WeightedScore, Confidence: s.Confidence})
+	}
+	return out
 }
 
 // Snapshot is the public aggregate dataset (ratings-v1.schema.json).
@@ -221,6 +258,7 @@ func Public(rows []store.Row, prior float64, now time.Time) Snapshot {
 			}
 		}
 		m.Cohorts = append(m.Cohorts, Global(rs, prior))
+		m.Languages = byLanguage(rs, prior)
 		snap.Models = append(snap.Models, m)
 	}
 	sort.Slice(snap.Models, func(i, j int) bool {

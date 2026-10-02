@@ -73,6 +73,10 @@ type Rating struct {
 	Tags          []string      `json:"tags,omitempty"`
 	Observations  *Observations `json:"observations,omitempty"`
 	AppVersion    string        `json:"app_version,omitempty"`
+	// Language is the language the person used the model in, as a base
+	// tag such as es, or zh-Hans or zh-Hant for Chinese, when they chose to
+	// say. It is never combined with hardware in what is published.
+	Language string `json:"language,omitempty"`
 }
 
 // Tags are the structured reasons a rating may give.
@@ -97,7 +101,12 @@ var (
 	familyRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
 	clientRe  = regexp.MustCompile(`^[a-f0-9]{32,64}$`)
 	versionRe = regexp.MustCompile(`^[0-9A-Za-z.+-]{1,32}$`)
+	// languageRe is a base language tag, or Chinese with its script.
+	languageRe = regexp.MustCompile(`^([a-z]{2,3}|zh-Hans|zh-Hant)$`)
 )
+
+// ValidLanguage reports a language a rating may give; "" is none.
+func ValidLanguage(l string) bool { return l == "" || languageRe.MatchString(l) }
 
 func oneOf(field, v string, allowed []string) error {
 	if !slices.Contains(allowed, v) {
@@ -162,6 +171,9 @@ func (r Rating) Validate() error {
 	}
 	if r.AppVersion != "" && !versionRe.MatchString(r.AppVersion) {
 		add(errors.New("app_version is not a version"))
+	}
+	if !ValidLanguage(r.Language) {
+		add(errors.New("language must be a base language tag such as es, or zh-Hans or zh-Hant"))
 	}
 	return errors.Join(errs...)
 }
