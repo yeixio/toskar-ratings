@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yggdrasil-ratings
+spec:
+  # One instance: SQLite on a ReadWriteOnce volume, and rate limits kept
+  # in memory. Recreate so the old pod lets go of the volume first.
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ratings
+          image: ghcr.io/yeixio/yggdrasil-ratings:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # nginx sets X-Forwarded-For to the address it sees.
+            - name: RATINGS_TRUST_PROXY
+              value: "true"
+          envFrom:
+            - secretRef:
+                name: yggdrasil-ratings
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: yggdrasil-ratings-data

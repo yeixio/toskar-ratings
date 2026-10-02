@@ -1,0 +1,12 @@
+# The SQLite database, the service's only state. Retained if the claim is
+# deleted, so pruning the app never deletes ratings.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: yggdrasil-ratings-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: do-block-storage-retain
+  resources:
+    requests:
+      storage: 1Gi
