@@ -1,0 +1,24 @@
+# An example deployment: the service behind Caddy, which gets a TLS
+# certificate for ratings.yggdrasil.yeix.io. Copy to compose.yml, put the
+# secrets in .env (see docs/deploy.md), and run: docker compose up -d
+services:
+  ratings:
+    image: ghcr.io/yeixio/yggdrasil-ratings:latest
+    build: .
+    restart: unless-stopped
+    environment:
+      RATINGS_SECRET: ${RATINGS_SECRET:?set RATINGS_SECRET in .env}
+      RATINGS_ADMIN_TOKEN: ${RATINGS_ADMIN_TOKEN:-}
+      RATINGS_TRUST_PROXY: "true"
+    volumes:
+      - ratings-data:/data
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    command: caddy reverse-proxy --from ratings.yggdrasil.yeix.io --to ratings:8080
+    volumes:
+      - caddy-data:/data
+volumes:
+  ratings-data:
+  caddy-data:
