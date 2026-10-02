@@ -1,5 +1,5 @@
 # An example deployment: the service behind Caddy, which gets a TLS
-# certificate for ratings.yggdrasil.yeix.io. Copy to compose.yml, put the
+# certificate for ratings.toskar.ai. Copy to compose.yml, put the
 # secrets in .env (see docs/deploy.md), and run: docker compose up -d
 services:
   ratings:
@@ -16,7 +16,7 @@ services:
     image: caddy:2
     restart: unless-stopped
     ports: ["80:80", "443:443"]
-    command: caddy reverse-proxy --from ratings.yggdrasil.yeix.io --to ratings:8080
+    command: caddy reverse-proxy --from ratings.toskar.ai --to ratings:8080
     volumes:
       - caddy-data:/data
 volumes:

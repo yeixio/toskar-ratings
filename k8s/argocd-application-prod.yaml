@@ -1,0 +1,22 @@
+# Apply once: kubectl apply -f k8s/argocd-application-prod.yaml
+# ArgoCD then keeps the cluster in step with k8s/overlays/prod on main.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: yggdrasil-ratings-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/yeixio/yggdrasil-ratings
+    targetRevision: main
+    path: k8s/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: yggdrasil-ratings-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
