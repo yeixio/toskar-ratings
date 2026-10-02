@@ -55,6 +55,7 @@
         "context_band": {"enum": ["0-8k", "8-32k", "32-128k", "128k+"]}
       }
     },
-    "app_version": {"type": "string", "pattern": "^[0-9A-Za-z.+-]{1,32}$"}
+    "app_version": {"type": "string", "pattern": "^[0-9A-Za-z.+-]{1,32}$"},
+    "language": {"type": "string", "pattern": "^([a-z]{2,3}|zh-Hans|zh-Hant)$", "description": "The language the model was used in, as a base tag such as es (zh-Hans or zh-Hant for Chinese), when the person chose to say. Never published with hardware."}
   }
 }

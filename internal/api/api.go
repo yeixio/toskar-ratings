@@ -192,6 +192,7 @@ type updateRequest struct {
 	Stars        int                  `json:"stars"`
 	Tags         []string             `json:"tags,omitempty"`
 	Observations *schema.Observations `json:"observations,omitempty"`
+	Language     string               `json:"language,omitempty"`
 }
 
 func (s *Server) update(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +201,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Reuse the full validation for the parts an update can change.
-	probe := schema.Rating{SchemaVersion: schema.Version, ClientID: req.ClientID, Stars: req.Stars, Tags: req.Tags, Observations: req.Observations,
+	probe := schema.Rating{SchemaVersion: schema.Version, ClientID: req.ClientID, Stars: req.Stars, Tags: req.Tags, Observations: req.Observations, Language: req.Language,
 		Model:    schema.Model{ID: "probe", Format: "gguf", Quantization: "Q4"},
 		Runtime:  schema.Runtime{Type: "llamacpp", Backend: "cpu"},
 		Hardware: schema.Hardware{Platform: "linux", Architecture: "amd64", Vendor: "cpu", Family: "probe", MemoryType: "system", MemoryBucket: "8-16"}}
@@ -208,7 +209,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	s.done(w, s.Store.Update(r.Context(), r.PathValue("key"), req.ClientID, req.Stars, req.Tags, req.Observations, s.batch(r)), http.StatusOK)
+	s.done(w, s.Store.Update(r.Context(), r.PathValue("key"), req.ClientID, req.Stars, req.Tags, req.Observations, req.Language, s.batch(r)), http.StatusOK)
 }
 
 func (s *Server) delete(w http.ResponseWriter, r *http.Request) {

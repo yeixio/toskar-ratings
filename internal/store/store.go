@@ -79,6 +79,33 @@ CREATE TABLE IF NOT EXISTS ratings (
 );
 CREATE INDEX IF NOT EXISTS ratings_config ON ratings (model, format, quantization, runtime, backend);
 CREATE INDEX IF NOT EXISTS ratings_batch ON ratings (batch);`)
+	if err != nil {
+		return err
+	}
+	// The language a rating was given for, added after the first release.
+	return s.addColumn("ratings", "language", `TEXT NOT NULL DEFAULT ''`)
+}
+
+// addColumn adds a column unless the table already has it.
+func (s *Store) addColumn(table, column, def string) error {
+	rows, err := s.db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + def)
 	return err
 }
 
@@ -113,19 +140,19 @@ func (s *Store) Put(ctx context.Context, r schema.Rating, batch string) (string,
 	c := schema.Cohorts(r.Hardware, r.Runtime.Backend)
 	now := s.now()
 	res, err := s.db.ExecContext(ctx, `
-INSERT INTO ratings (key, client_hash, model, format, quantization, runtime, backend, tier0, tier1, tier2, tier3, stars, tags, observations, app_version, runtime_version, batch, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO ratings (key, client_hash, model, format, quantization, runtime, backend, tier0, tier1, tier2, tier3, stars, tags, observations, app_version, runtime_version, batch, language, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(key) DO NOTHING`,
 		key, s.ClientHash(r.ClientID), r.Model.ID, r.Model.Format, r.Model.Quantization, r.Runtime.Type, r.Runtime.Backend,
-		c[0], c[1], c[2], c[3], r.Stars, string(tags), obs, r.AppVersion, r.Runtime.Version, batch, now, now)
+		c[0], c[1], c[2], c[3], r.Stars, string(tags), obs, r.AppVersion, r.Runtime.Version, batch, r.Language, now, now)
 	if err != nil {
 		return "", false, err
 	}
 	if n, _ := res.RowsAffected(); n == 1 {
 		return key, true, nil
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE ratings SET stars = ?, tags = ?, observations = ?, app_version = ?, runtime_version = ?, batch = ?, invalid = 0, updated_at = ? WHERE key = ?`,
-		r.Stars, string(tags), obs, r.AppVersion, r.Runtime.Version, batch, now, key)
+	_, err = s.db.ExecContext(ctx, `UPDATE ratings SET stars = ?, tags = ?, observations = ?, app_version = ?, runtime_version = ?, batch = ?, language = ?, invalid = 0, updated_at = ? WHERE key = ?`,
+		r.Stars, string(tags), obs, r.AppVersion, r.Runtime.Version, batch, r.Language, now, key)
 	return key, false, err
 }
 
@@ -151,8 +178,8 @@ func (s *Store) owner(ctx context.Context, key, clientID string) error {
 	return nil
 }
 
-// Update changes the stars, tags, and observations of a client's rating.
-func (s *Store) Update(ctx context.Context, key, clientID string, stars int, tags []string, obs *schema.Observations, batch string) error {
+// Update changes the stars, tags, observations, and language of a client's rating.
+func (s *Store) Update(ctx context.Context, key, clientID string, stars int, tags []string, obs *schema.Observations, language, batch string) error {
 	if err := s.owner(ctx, key, clientID); err != nil {
 		return err
 	}
@@ -162,7 +189,7 @@ func (s *Store) Update(ctx context.Context, key, clientID string, stars int, tag
 		b, _ := json.Marshal(obs)
 		o = string(b)
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE ratings SET stars = ?, tags = ?, observations = ?, batch = ?, updated_at = ? WHERE key = ?`, stars, string(t), o, batch, s.now(), key)
+	_, err := s.db.ExecContext(ctx, `UPDATE ratings SET stars = ?, tags = ?, observations = ?, language = ?, batch = ?, updated_at = ? WHERE key = ?`, stars, string(t), o, language, batch, s.now(), key)
 	return err
 }
 
@@ -182,6 +209,8 @@ type Row struct {
 	Stars                                         int
 	Tags                                          []string
 	Observations                                  *schema.Observations
+	// Language is the language the rating was given for, or "".
+	Language string
 }
 
 // Config is the model configuration ratings are grouped by.
@@ -190,7 +219,7 @@ type Config struct {
 }
 
 func (s *Store) rows(ctx context.Context, where string, args ...any) ([]Row, error) {
-	q := `SELECT model, format, quantization, runtime, backend, tier0, tier1, tier2, tier3, stars, tags, COALESCE(observations, '') FROM ratings WHERE invalid = 0`
+	q := `SELECT model, format, quantization, runtime, backend, tier0, tier1, tier2, tier3, stars, tags, COALESCE(observations, ''), language FROM ratings WHERE invalid = 0`
 	if where != "" {
 		q += " AND " + where
 	}
@@ -203,7 +232,7 @@ func (s *Store) rows(ctx context.Context, where string, args ...any) ([]Row, err
 	for rs.Next() {
 		var r Row
 		var tags, obs string
-		if err := rs.Scan(&r.Model, &r.Format, &r.Quantization, &r.Runtime, &r.Backend, &r.Tiers[0], &r.Tiers[1], &r.Tiers[2], &r.Tiers[3], &r.Stars, &tags, &obs); err != nil {
+		if err := rs.Scan(&r.Model, &r.Format, &r.Quantization, &r.Runtime, &r.Backend, &r.Tiers[0], &r.Tiers[1], &r.Tiers[2], &r.Tiers[3], &r.Stars, &tags, &obs, &r.Language); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal([]byte(tags), &r.Tags)

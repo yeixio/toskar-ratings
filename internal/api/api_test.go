@@ -209,3 +209,62 @@ func TestPrior(t *testing.T) {
 		t.Fatal("a single rating outranked many")
 	}
 }
+
+// A rating can say the language the model was used in. The snapshot shows
+// each language with enough ratings, for the configuration as a whole.
+func TestLanguages(t *testing.T) {
+	_, h := server(t)
+	withLanguage := func(n, stars int, lang string) {
+		t.Helper()
+		body := strings.Replace(rating(client(n), stars, "m4-max", "32-64"), `"stars":`, `"language":"`+lang+`","stars":`, 1)
+		if rr := do(t, h, "POST", "/v1/ratings", body, nil, fmt.Sprintf("198.51.100.%d:1", n+1)); rr.Code != http.StatusCreated {
+			t.Fatalf("rating in %s: %d %s", lang, rr.Code, rr.Body)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		withLanguage(i, 2, "es")
+	}
+	withLanguage(3, 5, "fr")
+	withLanguage(4, 5, "zh-Hant")
+	do(t, h, "POST", "/v1/ratings", rating(client(5), 5, "m4-max", "32-64"), nil, "198.51.100.9:1")
+
+	for _, bad := range []string{"EN", "en-US", "english", "zh-Latn", "e"} {
+		body := strings.Replace(rating(client(9), 4, "m4-max", "32-64"), `"stars":`, `"language":"`+bad+`","stars":`, 1)
+		if rr := do(t, h, "POST", "/v1/ratings", body, nil, "192.0.2.1:1"); rr.Code < 400 || rr.Code >= 500 {
+			t.Errorf("language %q accepted: %d", bad, rr.Code)
+		}
+	}
+
+	snapshot := func() []aggregate.LanguageStats {
+		rr := do(t, h, "GET", "/v1/aggregates", "", nil, "192.0.2.10:1")
+		var snap aggregate.Snapshot
+		if err := json.Unmarshal(rr.Body.Bytes(), &snap); err != nil || len(snap.Models) != 1 {
+			t.Fatalf("snapshot %s", rr.Body)
+		}
+		return snap.Models[0].Languages
+	}
+	// French and Chinese have too few ratings to show.
+	if got := snapshot(); len(got) != 1 || got[0].Language != "es" || got[0].Ratings != 3 || got[0].Average != 2 {
+		t.Fatalf("languages %+v", got)
+	}
+
+	// Changing a rating can add its language.
+	rr := do(t, h, "POST", "/v1/ratings", rating(client(6), 4, "m4-max", "32-64"), nil, "198.51.100.10:1")
+	var put struct {
+		Key string `json:"key"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &put)
+	upd := fmt.Sprintf(`{"client_id":%q,"stars":4,"language":"fr"}`, client(6))
+	if rr := do(t, h, "PUT", "/v1/ratings/"+put.Key, upd, nil, "192.0.2.11:1"); rr.Code != http.StatusOK {
+		t.Fatalf("update %d %s", rr.Code, rr.Body)
+	}
+	withLanguage(7, 3, "fr")
+	got := snapshot()
+	if len(got) != 2 || got[1].Language != "fr" || got[1].Ratings != 3 || got[1].Average != 4 {
+		t.Fatalf("languages after update %+v", got)
+	}
+	upd = fmt.Sprintf(`{"client_id":%q,"stars":4,"language":"French"}`, client(6))
+	if rr := do(t, h, "PUT", "/v1/ratings/"+put.Key, upd, nil, "192.0.2.11:1"); rr.Code < 400 || rr.Code >= 500 {
+		t.Fatalf("bad language on update %d", rr.Code)
+	}
+}
