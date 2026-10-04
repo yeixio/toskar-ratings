@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/yeixio/yggdrasil-ratings/schema/ratings-v1.schema.json",
-  "title": "Yggdrasil community model ratings aggregate snapshot, version 1",
+  "title": "Toskar community model ratings aggregate snapshot, version 1",
   "description": "Public aggregates: no per-person records. A cohort appears only with at least min_ratings ratings; exact-hardware cohorts are never published.",
   "type": "object",
   "additionalProperties": false,

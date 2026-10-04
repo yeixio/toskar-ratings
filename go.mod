@@ -1,4 +1,4 @@
-module github.com/yeixio/yggdrasil-ratings
+module github.com/yeixio/toskar-ratings
 
 go 1.26.3
 

@@ -8,5 +8,5 @@ resources:
 
 # The release a v* tag published (.github/workflows/release.yml).
 images:
-  - name: ghcr.io/yeixio/yggdrasil-ratings
+  - name: ghcr.io/yeixio/toskar-ratings
     newTag: v0.1.0

@@ -15,7 +15,7 @@ import (
 
 	_ "modernc.org/sqlite" // the database driver
 
-	"github.com/yeixio/yggdrasil-ratings/internal/schema"
+	"github.com/yeixio/toskar-ratings/internal/schema"
 )
 
 // Errors.

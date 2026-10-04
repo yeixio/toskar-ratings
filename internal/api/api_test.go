@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yeixio/yggdrasil-ratings/internal/aggregate"
-	"github.com/yeixio/yggdrasil-ratings/internal/store"
+	"github.com/yeixio/toskar-ratings/internal/aggregate"
+	"github.com/yeixio/toskar-ratings/internal/store"
 )
 
 const secret = "0123456789abcdef0123456789abcdef"

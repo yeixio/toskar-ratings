@@ -1,8 +1,8 @@
-// Command yggdrasil-ratings runs the community ratings service, or writes
+// Command toskar-ratings runs the community ratings service, or writes
 // a public aggregate snapshot.
 //
-//	yggdrasil-ratings serve
-//	yggdrasil-ratings snapshot -out ratings.json
+//	toskar-ratings serve
+//	toskar-ratings snapshot -out ratings.json
 //
 // Configuration is by environment:
 //
@@ -26,8 +26,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/yeixio/yggdrasil-ratings/internal/api"
-	"github.com/yeixio/yggdrasil-ratings/internal/store"
+	"github.com/yeixio/toskar-ratings/internal/api"
+	"github.com/yeixio/toskar-ratings/internal/store"
 )
 
 func env(k, def string) string {
@@ -40,7 +40,7 @@ func env(k, def string) string {
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: yggdrasil-ratings serve | snapshot -out FILE")
+		fmt.Fprintln(os.Stderr, "usage: toskar-ratings serve | snapshot -out FILE")
 		os.Exit(2)
 	}
 	secret := os.Getenv("RATINGS_SECRET")
@@ -93,7 +93,7 @@ func main() {
 			os.Exit(1)
 		}
 	default:
-		fmt.Fprintln(os.Stderr, "usage: yggdrasil-ratings serve | snapshot -out FILE")
+		fmt.Fprintln(os.Stderr, "usage: toskar-ratings serve | snapshot -out FILE")
 		os.Exit(2)
 	}
 }

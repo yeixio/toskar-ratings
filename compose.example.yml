@@ -3,7 +3,7 @@
 # secrets in .env (see docs/deploy.md), and run: docker compose up -d
 services:
   ratings:
-    image: ghcr.io/yeixio/yggdrasil-ratings:latest
+    image: ghcr.io/yeixio/toskar-ratings:latest
     build: .
     restart: unless-stopped
     environment:
