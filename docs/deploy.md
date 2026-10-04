@@ -19,6 +19,8 @@ openssl rand -hex 32   # RATINGS_ADMIN_TOKEN
 
 Production runs on the yeixio DigitalOcean Kubernetes cluster, kept in step with [`k8s/overlays/prod`](../k8s/overlays/prod) on `main` by ArgoCD. It uses one replica, because the database is SQLite on a 1 GB `do-block-storage-retain` volume and the rate limits are in memory. The cluster's ingress-nginx and cert-manager (`letsencrypt-prod`) serve it at `https://ratings.toskar.ai`.
 
+The cluster names (namespace `yggdrasil-ratings-prod`, volume `yggdrasil-ratings-data`, the TLS secret, and the SSM paths under `/yggdrasil-ratings/prod/`) date from before the Toskar rename and stay as they are. They aren't shown to anyone, and renaming the volume or the SSM paths would mean moving the database and copying the secret.
+
 These steps are done once:
 
 1. **Store the secrets in AWS SSM.** Generate them straight into SecureString parameters, so they're never shown or written to disk:
@@ -51,7 +53,7 @@ docker compose up -d
 
 Point a DNS record for `ratings.toskar.ai` at the host. Caddy gets a certificate on the first request. Behind any other reverse proxy, set `RATINGS_TRUST_PROXY=true` so rate limits use the client's address from `X-Forwarded-For`. Without a proxy, leave it unset.
 
-The image is built and pushed to `ghcr.io/yeixio/yggdrasil-ratings` when a `v*` tag is pushed (`.github/workflows/release.yml`).
+The image is built and pushed to `ghcr.io/yeixio/toskar-ratings` when a `v*` tag is pushed (`.github/workflows/release.yml`).
 
 | Variable | Default | |
 | --- | --- | --- |
@@ -66,7 +68,7 @@ The image is built and pushed to `ghcr.io/yeixio/yggdrasil-ratings` when a `v*` 
 The database is the only state:
 
 ```bash
-docker compose exec ratings /usr/local/bin/yggdrasil-ratings snapshot -out /data/snapshot.json   # the public view
+docker compose exec ratings /usr/local/bin/toskar-ratings snapshot -out /data/snapshot.json   # the public view
 sqlite3 /var/lib/docker/volumes/<project>_ratings-data/_data/ratings.db ".backup ratings-backup.db"
 ```
 
@@ -74,7 +76,7 @@ On Kubernetes, take a snapshot of the `yggdrasil-ratings-data` volume in Digital
 
 ## 4. The public dataset
 
-[yeixio/yggdrasil-model-data](https://github.com/yeixio/yggdrasil-model-data) pulls `GET /v1/aggregates` once a day with GitHub Actions, validates it against the schema, and commits it with that repository's own token. Set its `RATINGS_URL` repository variable to the service's address, such as `https://ratings.toskar.ai`, once the service is up. The service itself never holds a GitHub credential.
+[yeixio/toskar-model-data](https://github.com/yeixio/toskar-model-data) pulls `GET /v1/aggregates` once a day with GitHub Actions, validates it against the schema, and commits it with that repository's own token. Set its `RATINGS_URL` repository variable to the service's address, such as `https://ratings.toskar.ai`, once the service is up. The service itself never holds a GitHub credential.
 
 ## 5. Abuse
 

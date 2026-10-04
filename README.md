@@ -1,10 +1,10 @@
-# Yggdrasil community ratings
+# Toskar community ratings
 
-The hosted service behind [Yggdrasil](https://github.com/yeixio/yggdrasil-core)'s community model ratings ([yggdrasil-core#37](https://github.com/yeixio/yggdrasil-core/issues/37)). It answers one question:
+The hosted service behind [Toskar](https://github.com/yeixio/yggdrasil-core)'s community model ratings ([yggdrasil-core#37](https://github.com/yeixio/yggdrasil-core/issues/37)). It answers one question:
 
 > **How well does this model work for people with hardware like mine?**
 
-People rate a model from 1 to 5 stars, optionally with reasons such as "fast" or "crashed", and, if they agree, the speed and stability Yggdrasil observed. Each rating is tied to:
+People rate a model from 1 to 5 stars, optionally with reasons such as "fast" or "crashed", and, if they agree, the speed and stability Toskar observed. Each rating is tied to:
 - the model, format, quantization, runtime, and backend;
 - a coarse hardware class.
 
@@ -22,7 +22,7 @@ Scores are confidence-weighted, so one 5-star rating does not outrank hundreds o
 
 ## Privacy
 
-Yggdrasil asks before sending anything. A rating carries the stars, the tags, the model configuration, and a hardware class such as "Apple M4 Max, 32–64 GB". Observations are sent only if the person allows them, and so is the language they used the model in, such as `es`.
+Toskar asks before sending anything. A rating carries the stars, the tags, the model configuration, and a hardware class such as "Apple M4 Max, 32–64 GB". Observations are sent only if the person allows them, and so is the language they used the model in, such as `es`.
 
 Never sent or stored:
 - prompts, responses, or files;
@@ -30,7 +30,7 @@ Never sent or stored:
 
 The `client_id` is random, made once per installation, and lets a person update or delete their own rating. The service stores only a keyed hash of it. Addresses are used only for rate limits and batch tags, never stored: a batch tag is the hour plus a keyed hash of the network prefix, so an abusive flood can be found and invalidated.
 
-The public aggregates have no per-person records. A cohort is published only with at least 3 ratings, and exact-hardware cohorts are never published. Ratings by language are published per model configuration, with the same minimum, and never split by hardware. A daily snapshot goes to [yeixio/yggdrasil-model-data](https://github.com/yeixio/yggdrasil-model-data).
+The public aggregates have no per-person records. A cohort is published only with at least 3 ratings, and exact-hardware cohorts are never published. Ratings by language are published per model configuration, with the same minimum, and never split by hardware. A daily snapshot goes to [yeixio/toskar-model-data](https://github.com/yeixio/toskar-model-data).
 
 ## API
 
@@ -52,16 +52,16 @@ Rate limits are 30 writes and 1,200 reads an hour per network (/24, or /48 for I
 See [docs/deploy.md](docs/deploy.md). In short:
 
 ```bash
-docker run -d -p 8080:8080 -v ratings:/data -e RATINGS_SECRET="$(openssl rand -hex 32)" ghcr.io/yeixio/yggdrasil-ratings
+docker run -d -p 8080:8080 -v ratings:/data -e RATINGS_SECRET="$(openssl rand -hex 32)" ghcr.io/yeixio/toskar-ratings
 ```
 
-`yggdrasil-ratings snapshot -out ratings.json` writes the public aggregates from the database.
+`toskar-ratings snapshot -out ratings.json` writes the public aggregates from the database.
 
 ## Development
 
 ```bash
 go test -race ./...
-go run ./cmd/yggdrasil-ratings serve   # needs RATINGS_SECRET and RATINGS_DB
+go run ./cmd/toskar-ratings serve   # needs RATINGS_SECRET and RATINGS_DB
 ```
 
-Licensed under the GNU AGPL v3, like Yggdrasil Core.
+Licensed under the GNU AGPL v3, like Toskar Core.

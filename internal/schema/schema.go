@@ -1,7 +1,7 @@
 // Package schema is the community ratings contract, version 1: what a
-// rating says, how it is checked, and how hardware is grouped. Yggdrasil
+// rating says, how it is checked, and how hardware is grouped. Toskar
 // Core sends ratings in this shape; the aggregates published to
-// yeixio/yggdrasil-model-data follow schema/ratings-v1.schema.json.
+// yeixio/toskar-model-data follow schema/ratings-v1.schema.json.
 package schema
 
 import (

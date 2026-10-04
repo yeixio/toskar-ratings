@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/yeixio/yggdrasil-ratings/internal/schema"
-	"github.com/yeixio/yggdrasil-ratings/internal/store"
+	"github.com/yeixio/toskar-ratings/internal/schema"
+	"github.com/yeixio/toskar-ratings/internal/store"
 )
 
 // Weight is how many ratings' worth the prior counts for: a model with a

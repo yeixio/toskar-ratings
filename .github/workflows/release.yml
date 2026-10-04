@@ -14,7 +14,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Build and push
         run: |
-          image=ghcr.io/yeixio/yggdrasil-ratings
+          image=ghcr.io/yeixio/toskar-ratings
           docker build -t "$image:${GITHUB_REF_NAME}" -t "$image:latest" .
           docker push "$image:${GITHUB_REF_NAME}"
           docker push "$image:latest"

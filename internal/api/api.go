@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yeixio/yggdrasil-ratings/internal/aggregate"
-	"github.com/yeixio/yggdrasil-ratings/internal/schema"
-	"github.com/yeixio/yggdrasil-ratings/internal/store"
+	"github.com/yeixio/toskar-ratings/internal/aggregate"
+	"github.com/yeixio/toskar-ratings/internal/schema"
+	"github.com/yeixio/toskar-ratings/internal/store"
 )
 
 // Server serves the API.
