@@ -6,8 +6,10 @@ on:
 permissions:
   contents: read
 jobs:
+  # CI_RUNS_ON (an org variable) moves this to self-hosted runners; unset,
+  # it stays on GitHub's.
   go:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v7
@@ -20,6 +22,8 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
       - name: Schemas are valid JSON
         run: for f in schema/*.json; do python3 -m json.tool "$f" > /dev/null; done
+  # Docker builds stay on GitHub's runners: the self-hosted CI runners have
+  # no Docker.
   docker:
     runs-on: ubuntu-latest
     steps:
