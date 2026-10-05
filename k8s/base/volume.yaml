@@ -3,7 +3,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: yggdrasil-ratings-data
+  name: toskar-ratings-data
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: do-block-storage-retain

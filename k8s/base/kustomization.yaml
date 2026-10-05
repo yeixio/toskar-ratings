@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+  - secret-store.yaml
   - external-secret.yaml
   - volume.yaml
   - deployment.yaml
@@ -10,5 +11,5 @@ resources:
 
 labels:
   - pairs:
-      app: yggdrasil-ratings
+      app: toskar-ratings
     includeSelectors: true
