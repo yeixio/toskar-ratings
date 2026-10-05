@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: yggdrasil-ratings
+  name: toskar-ratings
 spec:
   # One instance: SQLite on a ReadWriteOnce volume, and rate limits kept
   # in memory. Recreate so the old pod lets go of the volume first.
@@ -10,6 +10,10 @@ spec:
     type: Recreate
   template:
     spec:
+      # The image is private on ghcr.io; ghcr-credentials is copied in by
+      # hand once (docs/deploy.md), like the other apps on this cluster.
+      imagePullSecrets:
+        - name: ghcr-credentials
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -29,7 +33,7 @@ spec:
               value: "true"
           envFrom:
             - secretRef:
-                name: yggdrasil-ratings
+                name: toskar-ratings
           volumeMounts:
             - name: data
               mountPath: /data
@@ -59,4 +63,4 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: yggdrasil-ratings-data
+            claimName: toskar-ratings-data

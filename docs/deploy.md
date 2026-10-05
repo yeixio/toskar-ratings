@@ -19,21 +19,33 @@ openssl rand -hex 32   # RATINGS_ADMIN_TOKEN
 
 Production runs on the yeixio DigitalOcean Kubernetes cluster, kept in step with [`k8s/overlays/prod`](../k8s/overlays/prod) on `main` by ArgoCD. It uses one replica, because the database is SQLite on a 1 GB `do-block-storage-retain` volume and the rate limits are in memory. The cluster's ingress-nginx and cert-manager (`letsencrypt-prod`) serve it at `https://ratings.toskar.ai`.
 
-The cluster names (namespace `yggdrasil-ratings-prod`, volume `yggdrasil-ratings-data`, the TLS secret, and the SSM paths under `/yggdrasil-ratings/prod/`) date from before the Toskar rename and stay as they are. They aren't shown to anyone, and renaming the volume or the SSM paths would mean moving the database and copying the secret.
+These steps are done once. The service runs in the namespace `toskar-ratings-prod`, its database is the volume `toskar-ratings-data`, and its secrets are under `/toskar-ratings/prod/` in SSM.
 
-These steps are done once:
-
-1. **Store the secrets in AWS SSM.** Generate them straight into SecureString parameters, so they're never shown or written to disk:
+1. **Store the secrets in AWS SSM** (`aws login` first if your session has expired). Generate them straight into SecureString parameters, so they're never shown or written to disk:
 
    ```bash
-   aws ssm put-parameter --name /yggdrasil-ratings/prod/RATINGS_SECRET --type SecureString --value "$(openssl rand -hex 32)"
-   aws ssm put-parameter --name /yggdrasil-ratings/prod/RATINGS_ADMIN_TOKEN --type SecureString --value "$(openssl rand -hex 32)"
+   aws ssm put-parameter --region us-east-1 --name /toskar-ratings/prod/RATINGS_SECRET --type SecureString --value "$(openssl rand -hex 32)"
+   aws ssm put-parameter --region us-east-1 --name /toskar-ratings/prod/RATINGS_ADMIN_TOKEN --type SecureString --value "$(openssl rand -hex 32)"
    ```
 
    Never overwrite `RATINGS_SECRET`.
-2. **Let the namespace read them.** Create the namespace, and a SecretStore named `aws-ssm` in it, the same as `pacificnorthnorthcom`'s, with its AWS credentials Secret. The [ExternalSecret](../k8s/base/external-secret.yaml) syncs both parameters into the Secret `yggdrasil-ratings` every hour.
-3. **DNS.** In Route 53, add `A ratings.toskar.ai → 167.172.1.191` and `AAAA ratings.toskar.ai → 2604:a880:400:d1:0:1:64a4:7001`, the ingress load balancer's addresses.
-4. **ArgoCD.** Run `kubectl apply -f k8s/argocd-application-prod.yaml`.
+2. **Create the namespace and copy in the two credentials** the other apps on this cluster use. The commands copy each Secret without printing it: `aws-credentials` lets the [SecretStore](../k8s/base/secret-store.yaml) read SSM, and `ghcr-credentials` lets the cluster pull the private image.
+
+   ```bash
+   kubectl create namespace toskar-ratings-prod
+   kubectl get secret aws-credentials -n pacificnorthnorthcom -o json \
+     | jq 'del(.metadata.namespace,.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp,.metadata.managedFields,.metadata.ownerReferences,.metadata.annotations)' \
+     | kubectl apply -n toskar-ratings-prod -f -
+   kubectl get secret ghcr-credentials -n toskar-ai-prod -o json \
+     | jq 'del(.metadata.namespace,.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp,.metadata.managedFields,.metadata.ownerReferences,.metadata.annotations)' \
+     | kubectl apply -n toskar-ratings-prod -f -
+   ```
+
+   If that AWS key's IAM policy only allows its own app's parameters, also allow `ssm:GetParameter*` on `arn:aws:ssm:us-east-1:*:parameter/toskar-ratings/prod/*`, or make a separate key for this app. The [ExternalSecret](../k8s/base/external-secret.yaml) then syncs both parameters into the Secret `toskar-ratings` every hour.
+3. **Publish the image.** Push the tag that `k8s/overlays/prod/kustomization.yaml` names (`v0.1.0` for the first deploy), and wait for the Release workflow to push `ghcr.io/yeixio/toskar-ratings`.
+4. **DNS.** `ratings.toskar.ai` needs `A → 167.172.1.191` and `AAAA → 2604:a880:400:d1:0:1:64a4:7001`, the ingress load balancer's addresses (already set in Route 53).
+5. **ArgoCD.** Run `kubectl apply -f k8s/argocd-application-prod.yaml`. ArgoCD creates the rest, and cert-manager gets the certificate.
+6. **Check** that `curl https://ratings.toskar.ai/healthz` answers with a real certificate, and that `/v1/aggregates` returns the empty aggregates.
 
 To release, push a `v*` tag. Once its image is built, set `newTag` in `k8s/overlays/prod/kustomization.yaml` to that tag and merge.
 
@@ -72,7 +84,7 @@ docker compose exec ratings /usr/local/bin/toskar-ratings snapshot -out /data/sn
 sqlite3 /var/lib/docker/volumes/<project>_ratings-data/_data/ratings.db ".backup ratings-backup.db"
 ```
 
-On Kubernetes, take a snapshot of the `yggdrasil-ratings-data` volume in DigitalOcean, or schedule one.
+On Kubernetes, take a snapshot of the `toskar-ratings-data` volume in DigitalOcean, or schedule one.
 
 ## 4. The public dataset
 
