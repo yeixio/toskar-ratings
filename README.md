@@ -1,6 +1,6 @@
 # Toskar community ratings
 
-The hosted service behind [Toskar](https://github.com/yeixio/yggdrasil-core)'s community model ratings ([yggdrasil-core#37](https://github.com/yeixio/yggdrasil-core/issues/37)). It answers one question:
+The hosted service behind [Toskar](https://github.com/yeixio/toskar-core)'s community model ratings ([toskar-core#37](https://github.com/yeixio/toskar-core/issues/37)). It answers one question:
 
 > **How well does this model work for people with hardware like mine?**
 
@@ -63,5 +63,9 @@ docker run -d -p 8080:8080 -v ratings:/data -e RATINGS_SECRET="$(openssl rand -h
 go test -race ./...
 go run ./cmd/toskar-ratings serve   # needs RATINGS_SECRET and RATINGS_DB
 ```
+
+## Contributing
+
+Bug reports, tests, and fixes are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and look for issues labeled [good first issue](https://github.com/yeixio/toskar-ratings/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 
 Licensed under the GNU AGPL v3, like Toskar Core.

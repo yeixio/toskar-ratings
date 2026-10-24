@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/yeixio/yggdrasil-ratings/schema/rating-v1.schema.json",
+  "$id": "https://github.com/yeixio/toskar-ratings/schema/rating-v1.schema.json",
   "title": "Toskar community model rating, version 1",
   "description": "What Toskar sends when a person chooses to share a rating. No names, addresses, prompts, responses, or files.",
   "type": "object",

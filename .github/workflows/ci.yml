@@ -32,7 +32,12 @@ jobs:
       - name: Build the image
         run: docker build -t toskar-ratings:ci .
       - name: The image starts and answers
+        # The home runners share one Docker daemon, so each run takes its own
+        # container name and a free host port, and removes the container after.
         run: |
-          docker run -d --name ratings -p 8080:8080 -e RATINGS_SECRET=ci-secret-ci-secret-ci-secret-ci toskar-ratings:ci
-          for i in $(seq 1 20); do curl -sf localhost:8080/healthz && exit 0; sleep 1; done
-          docker logs ratings; exit 1
+          name="ratings-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name "$name" -p 127.0.0.1::8080 -e RATINGS_SECRET=ci-secret-ci-secret-ci-secret-ci toskar-ratings:ci
+          port="$(docker port "$name" 8080/tcp | head -n1 | sed 's/.*://')"
+          for i in $(seq 1 20); do curl -sf "localhost:$port/healthz" && exit 0; sleep 1; done
+          docker logs "$name"; exit 1
