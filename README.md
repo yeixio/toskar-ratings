@@ -64,6 +64,12 @@ go test -race ./...
 go run ./cmd/toskar-ratings serve   # needs RATINGS_SECRET and RATINGS_DB
 ```
 
+## Support Toskar
+
+Toskar's community ratings are free and open source. If they're useful to you, you can [donate to Toskar](https://yeix.io/donate/toskar), once or monthly, by card. Donations pay for its development. Nothing is held back for donors.
+
+[![Donate to Toskar](https://img.shields.io/badge/Donate-Support_Toskar-ff6a55?style=for-the-badge&logo=stripe&logoColor=white)](https://yeix.io/donate/toskar)
+
 ## Contributing
 
 Bug reports, tests, and fixes are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and look for issues labeled [good first issue](https://github.com/yeixio/toskar-ratings/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
