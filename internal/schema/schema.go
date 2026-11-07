@@ -32,20 +32,28 @@ type Runtime struct {
 	Version string `json:"version,omitempty"`
 }
 
-// Hardware is a computer's normalized class: never a name, serial, or
-// address.
+// Hardware is a computer's, phone's, or tablet's normalized class: never a
+// name, device model, serial, or address.
 type Hardware struct {
+	// Platform is macos, linux, or windows for a computer, and ios, ipados,
+	// or android for a phone or tablet.
 	Platform     string `json:"platform"`
 	Architecture string `json:"architecture"`
-	// Vendor is apple, nvidia, amd, intel, or cpu (no accelerator).
+	// Vendor is apple, nvidia, amd, intel, or cpu (no accelerator) on a
+	// computer. On a phone or tablet it is the chip maker: apple on ios and
+	// ipados; qualcomm, samsung, google, or mediatek on android.
 	Vendor string `json:"vendor"`
 	// Family is the accelerator model, such as m4-max or rtx-4090, or for
-	// cpu, the CPU vendor.
+	// cpu, the CPU vendor. On a phone or tablet it is the chip, such as
+	// a17-pro or snapdragon-8-gen-3, never the device model.
 	Family string `json:"family"`
-	// MemoryType is unified, dedicated, or system.
+	// MemoryType is unified, dedicated, or system. Phones and tablets are
+	// unified.
 	MemoryType string `json:"memory_type"`
 	// MemoryBucket is the memory the model can use, in GB: 0-8, 8-16,
-	// 16-32, 32-64, 64-128, or 128+.
+	// 16-32, 32-64, 64-128, or 128+ on a computer. A phone or tablet gives
+	// its memory, rounded to the nearest GB, as 0-4, 4-8, 8-12, 12-16,
+	// 16-24, or 24+ (each band includes its lower bound).
 	MemoryBucket string `json:"memory_bucket_gb"`
 }
 
@@ -84,16 +92,54 @@ var Tags = []string{"great_responses", "fast", "slow", "stable", "crashed", "too
 	"great_for_coding", "great_for_chat", "good_tool_use", "poor_tool_use"}
 
 var (
-	Formats   = []string{"gguf", "mlx", "safetensors", "onnx"}
-	Runtimes  = []string{"llamacpp", "mlx", "vllm", "ollama", "external"}
-	Backends  = []string{"metal", "cuda", "rocm", "vulkan", "sycl", "cpu"}
-	Platforms = []string{"macos", "linux", "windows"}
+	Formats  = []string{"gguf", "mlx", "safetensors", "onnx"}
+	Runtimes = []string{"llamacpp", "mlx", "vllm", "ollama", "external", PhoneRuntime}
+	Backends = []string{"metal", "cuda", "rocm", "vulkan", "sycl", "opencl", "cpu"}
+	// Platforms are computers' then phones' and tablets'.
+	Platforms = append(slices.Clone(ComputerPlatforms), PhonePlatforms...)
 	Archs     = []string{"arm64", "amd64"}
-	Vendors   = []string{"apple", "nvidia", "amd", "intel", "cpu"}
+	Vendors   = []string{"apple", "nvidia", "amd", "intel", "cpu", "qualcomm", "samsung", "google", "mediatek"}
 	Memories  = []string{"unified", "dedicated", "system"}
-	Buckets   = []string{"0-8", "8-16", "16-32", "32-64", "64-128", "128+"}
-	Contexts  = []string{"0-8k", "8-32k", "32-128k", "128k+"}
+	// Buckets are computers' memory bands then phones' and tablets'. The
+	// two never overlap, so a cohort key says which kind of device it is.
+	Buckets  = append(slices.Clone(ComputerBuckets), PhoneBuckets...)
+	Contexts = []string{"0-8k", "8-32k", "32-128k", "128k+"}
 )
+
+// Phones and tablets. Their ratings run on PhoneRuntime, so a phone's and
+// a computer's ratings of the same GGUF are never combined.
+const PhoneRuntime = "llama.rn"
+
+var (
+	ComputerPlatforms = []string{"macos", "linux", "windows"}
+	PhonePlatforms    = []string{"ios", "ipados", "android"}
+	ComputerBuckets   = []string{"0-8", "8-16", "16-32", "32-64", "64-128", "128+"}
+	PhoneBuckets      = []string{"0-4", "4-8", "8-12", "12-16", "16-24", "24+"}
+	// PhoneBackends are what llama.rn runs on.
+	PhoneBackends = []string{"metal", "opencl", "cpu"}
+	// phoneVendors are the chip makers each phone platform allows.
+	phoneVendors = map[string][]string{
+		"ios":     {"apple"},
+		"ipados":  {"apple"},
+		"android": {"qualcomm", "samsung", "google", "mediatek"},
+	}
+	// phoneChips are the chip names each phone vendor allows. Only chips
+	// pass, so a device model name such as pixel-8 or sm-s928b is refused
+	// and never stored.
+	phoneChips = map[string]*regexp.Regexp{
+		"apple":    regexp.MustCompile(`^(a\d{1,2}[xz]?(-pro|-bionic)?|m\d{1,2}(-pro|-max|-ultra)?)$`),
+		"qualcomm": regexp.MustCompile(`^snapdragon-(\d{3}g?(-plus)?|\d(s|-plus)?-(gen-\d|elite(-gen-\d)?))$`),
+		"samsung":  regexp.MustCompile(`^exynos-\d{3,4}$`),
+		"google":   regexp.MustCompile(`^tensor(-g\d{1,2})?$`),
+		"mediatek": regexp.MustCompile(`^(dimensity-\d{3,4}(-plus|-ultra|-max)?|helio-[agpx]\d{2,3})$`),
+	}
+	// phoneVersionRe is a phone rating's app and runtime version: numbers
+	// only, so nothing else, such as a device model, rides along in them.
+	phoneVersionRe = regexp.MustCompile(`^\d{1,6}(\.\d{1,6}){1,3}$`)
+)
+
+// IsPhone reports whether a platform is a phone's or tablet's.
+func IsPhone(platform string) bool { return slices.Contains(PhonePlatforms, platform) }
 
 var (
 	modelRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,99}$`)
@@ -142,6 +188,23 @@ func (r Rating) Validate() error {
 		add(errors.New("runtime.version is not a version"))
 	}
 	add(r.Hardware.Validate())
+	phone := IsPhone(r.Hardware.Platform)
+	switch {
+	case phone && r.Runtime.Type != PhoneRuntime:
+		add(fmt.Errorf("runtime.type must be %s on a phone or tablet", PhoneRuntime))
+	case phone:
+		add(oneOf("runtime.backend", r.Runtime.Backend, PhoneBackends))
+	case r.Runtime.Type == PhoneRuntime:
+		add(fmt.Errorf("runtime.type %s is only for phones and tablets", PhoneRuntime))
+	}
+	if phone {
+		if r.Runtime.Version != "" && !phoneVersionRe.MatchString(r.Runtime.Version) {
+			add(errors.New("runtime.version must be numbers such as 0.6.3 on a phone or tablet"))
+		}
+		if r.AppVersion != "" && !phoneVersionRe.MatchString(r.AppVersion) {
+			add(errors.New("app_version must be numbers such as 1.12.1 on a phone or tablet"))
+		}
+	}
 	if r.Stars < 1 || r.Stars > 5 {
 		add(errors.New("stars must be 1 to 5"))
 	}
@@ -194,6 +257,26 @@ func (h Hardware) Validate() error {
 	}
 	if !familyRe.MatchString(h.Family) {
 		errs = append(errs, errors.New("hardware.family must be a short slug such as m4-max"))
+	}
+	if IsPhone(h.Platform) {
+		if allowed := phoneVendors[h.Platform]; !slices.Contains(allowed, h.Vendor) {
+			errs = append(errs, fmt.Errorf("hardware.vendor must be one of %s on %s", strings.Join(allowed, ", "), h.Platform))
+		} else if !phoneChips[h.Vendor].MatchString(h.Family) {
+			errs = append(errs, errors.New("hardware.family must be a chip such as a17-pro or snapdragon-8-gen-3, never a device model"))
+		}
+		if h.MemoryType != "unified" {
+			errs = append(errs, errors.New("hardware.memory_type must be unified on a phone or tablet"))
+		}
+		if slices.Contains(ComputerBuckets, h.MemoryBucket) {
+			errs = append(errs, fmt.Errorf("hardware.memory_bucket_gb must be one of %s on a phone or tablet", strings.Join(PhoneBuckets, ", ")))
+		}
+	} else if slices.Contains(ComputerPlatforms, h.Platform) {
+		if slices.Contains(phoneVendors["android"], h.Vendor) {
+			errs = append(errs, fmt.Errorf("hardware.vendor %s is only for phones and tablets", h.Vendor))
+		}
+		if slices.Contains(PhoneBuckets, h.MemoryBucket) {
+			errs = append(errs, fmt.Errorf("hardware.memory_bucket_gb must be one of %s on a computer", strings.Join(ComputerBuckets, ", ")))
+		}
 	}
 	return errors.Join(errs...)
 }
