@@ -33,19 +33,32 @@ type Server struct {
 	Log        *slog.Logger
 	Now        func() time.Time
 
-	writes *limiter
-	reads  *limiter
+	writes       *limiter // per network
+	clientWrites *limiter // per client_id
+	reads        *limiter // per network
 }
 
 const maxBody = 16 << 10
 
+// Rate limits, per hour. Writes are limited per client_id, and per network
+// as a backstop against floods. The network limit leaves room for many
+// phones behind one carrier NAT, which share an address.
+const (
+	WritesPerClient  = 30
+	WritesPerNetwork = 300
+	ReadsPerNetwork  = 1200
+)
+
 // Handler returns the routes.
 func (s *Server) Handler() http.Handler {
 	if s.writes == nil {
-		s.writes = newLimiter(30, time.Hour)
+		s.writes = newLimiter(WritesPerNetwork, time.Hour)
+	}
+	if s.clientWrites == nil {
+		s.clientWrites = newLimiter(WritesPerClient, time.Hour)
 	}
 	if s.reads == nil {
-		s.reads = newLimiter(1200, time.Hour)
+		s.reads = newLimiter(ReadsPerNetwork, time.Hour)
 	}
 	if s.Log == nil {
 		s.Log = slog.Default()
@@ -125,15 +138,32 @@ func (s *Server) batch(r *http.Request) string {
 	return s.now().UTC().Format("2006010215") + "-" + hex.EncodeToString(m.Sum(nil))[:12]
 }
 
+func tooMany(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", "3600")
+	fail(w, http.StatusTooManyRequests, "too many requests; try again later")
+}
+
 func (s *Server) limited(l *limiter, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !l.allow(prefix(s.clientAddr(r))) {
-			w.Header().Set("Retry-After", "3600")
-			fail(w, http.StatusTooManyRequests, "too many requests; try again later")
+			tooMany(w)
 			return
 		}
 		h(w, r)
 	}
+}
+
+// clientAllowed counts a write by a client_id against its own limit, and
+// answers 429 when it is over. The limiter holds a keyed hash of the ID,
+// in memory only.
+func (s *Server) clientAllowed(w http.ResponseWriter, clientID string) bool {
+	m := hmac.New(sha256.New, s.Secret)
+	m.Write([]byte("limit:" + clientID))
+	if !s.clientWrites.allow(hex.EncodeToString(m.Sum(nil))[:32]) {
+		tooMany(w)
+		return false
+	}
+	return true
 }
 
 func (s *Server) admin(h http.HandlerFunc) http.HandlerFunc {
@@ -167,7 +197,7 @@ type putResponse struct {
 // configuration.
 func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 	var rating schema.Rating
-	if !decode(w, r, &rating) {
+	if !decode(w, r, &rating) || !s.clientAllowed(w, rating.ClientID) {
 		return
 	}
 	if err := rating.Validate(); err != nil {
@@ -197,7 +227,7 @@ type updateRequest struct {
 
 func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 	var req updateRequest
-	if !decode(w, r, &req) {
+	if !decode(w, r, &req) || !s.clientAllowed(w, req.ClientID) {
 		return
 	}
 	// Reuse the full validation for the parts an update can change.
@@ -213,6 +243,9 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
+	if !s.clientAllowed(w, r.Header.Get("X-Ratings-Client")) {
+		return
+	}
 	s.done(w, s.Store.Delete(r.Context(), r.PathValue("key"), r.Header.Get("X-Ratings-Client")), http.StatusNoContent)
 }
 
@@ -247,9 +280,25 @@ type modelResponse struct {
 func (s *Server) modelRatings(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	c := store.Config{Model: r.PathValue("model"), Format: q.Get("format"), Quantization: q.Get("quantization"), Runtime: q.Get("runtime"), Backend: q.Get("backend")}
+	// The hardware asked about, or a stand-in of the runtime's kind, so the
+	// whole query is checked as a rating would be: a phone's key goes with
+	// llama.rn, and a computer's with the others.
+	hw := q.Get("hardware")
+	probeHW := schema.Hardware{Platform: "linux", Architecture: "amd64", Vendor: "cpu", Family: "probe", MemoryType: "system", MemoryBucket: "8-16"}
+	if c.Runtime == schema.PhoneRuntime {
+		probeHW = schema.Hardware{Platform: "android", Architecture: "arm64", Vendor: "google", Family: "tensor", MemoryType: "unified", MemoryBucket: "8-12"}
+	}
+	if hw != "" {
+		h, err := schema.ParseKey(hw)
+		if err != nil {
+			fail(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		probeHW = h
+	}
 	probe := schema.Rating{SchemaVersion: schema.Version, ClientID: strings.Repeat("0", 32), Stars: 3,
 		Model: schema.Model{ID: c.Model, Format: c.Format, Quantization: c.Quantization}, Runtime: schema.Runtime{Type: c.Runtime, Backend: c.Backend},
-		Hardware: schema.Hardware{Platform: "linux", Architecture: "amd64", Vendor: "cpu", Family: "probe", MemoryType: "system", MemoryBucket: "8-16"}}
+		Hardware: probeHW}
 	if err := probe.Validate(); err != nil {
 		fail(w, http.StatusBadRequest, err.Error())
 		return
@@ -267,13 +316,8 @@ func (s *Server) modelRatings(w http.ResponseWriter, r *http.Request) {
 	}
 	prior := aggregate.Prior(mean, n)
 	resp := modelResponse{SchemaVersion: schema.Version, Model: c.Model, Format: c.Format, Quantization: c.Quantization, Runtime: c.Runtime, Backend: c.Backend, Tiers: []aggregate.Stats{}}
-	if hw := q.Get("hardware"); hw != "" {
-		h, err := schema.ParseKey(hw)
-		if err != nil {
-			fail(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		resp.Tiers = aggregate.ForHardware(rows, h, c.Backend, prior)
+	if hw != "" {
+		resp.Tiers = aggregate.ForHardware(rows, probeHW, c.Backend, prior)
 	} else if len(rows) > 0 {
 		resp.Tiers = []aggregate.Stats{aggregate.Global(rows, prior)}
 	}

@@ -268,3 +268,149 @@ func TestLanguages(t *testing.T) {
 		t.Fatalf("bad language on update %d", rr.Code)
 	}
 }
+
+func phoneRating(cl string, stars int, platform, vendor, family, backend, bucket string) string {
+	return fmt.Sprintf(`{"schema_version":1,"client_id":%q,
+	 "model":{"id":"qwen2.5-coder-7b-instruct","format":"gguf","quantization":"Q4_K_M"},
+	 "runtime":{"type":"llama.rn","backend":%q,"version":"0.6.3"},
+	 "hardware":{"platform":%q,"architecture":"arm64","vendor":%q,"family":%q,"memory_type":"unified","memory_bucket_gb":%q},
+	 "stars":%d,"app_version":"1.12.1","observations":{"tokens_per_second":%d}}`, cl, backend, platform, vendor, family, bucket, stars, 5+stars)
+}
+
+// Phones and tablets rate the same GGUF as computers; their cohorts stay
+// apart, and the snapshot publishes them with the same minimum.
+func TestPhoneRatings(t *testing.T) {
+	_, h := server(t)
+	post := func(body, from string) {
+		t.Helper()
+		if rr := do(t, h, "POST", "/v1/ratings", body, nil, from); rr.Code != http.StatusCreated {
+			t.Fatalf("rating %d %s", rr.Code, rr.Body)
+		}
+	}
+	// Three Macs, three Snapdragon 8 phones (two chips), three iPhones, and
+	// one Pixel: all behind one carrier NAT address but the Macs.
+	for i := 0; i < 3; i++ {
+		post(rating(client(i), 4, "m4-max", "32-64"), fmt.Sprintf("198.51.100.%d:1", i+1))
+	}
+	nat := "203.0.113.7:1"
+	post(phoneRating(client(10), 3, "android", "qualcomm", "snapdragon-8-gen-3", "opencl", "12-16"), nat)
+	post(phoneRating(client(11), 3, "android", "qualcomm", "snapdragon-8-gen-3", "opencl", "12-16"), nat)
+	post(phoneRating(client(12), 2, "android", "qualcomm", "snapdragon-8-elite", "opencl", "12-16"), nat)
+	for i := 20; i < 23; i++ {
+		post(phoneRating(client(i), 5, "ios", "apple", "a17-pro", "metal", "8-12"), nat)
+	}
+	post(phoneRating(client(30), 1, "android", "google", "tensor-g3", "cpu", "8-12"), nat)
+
+	// A computer asking about its hardware sees only computers.
+	rr := do(t, h, "GET", "/v1/models/qwen2.5-coder-7b-instruct/ratings?format=gguf&quantization=Q4_K_M&runtime=llamacpp&backend=metal&hardware=apple:m4-max:unified:32-64", "", nil, "192.0.2.10:1")
+	var resp modelResponse
+	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
+	if n := len(resp.Tiers); n == 0 || resp.Tiers[n-1].Tier != "global" || resp.Tiers[n-1].Ratings != 3 {
+		t.Fatalf("computer tiers %d %s", rr.Code, rr.Body)
+	}
+	// A phone asks with its own exact key, and sees only phones like it.
+	rr = do(t, h, "GET", "/v1/models/qwen2.5-coder-7b-instruct/ratings?format=gguf&quantization=Q4_K_M&runtime=llama.rn&backend=opencl&hardware=qualcomm:snapdragon-8-gen-3:unified:12-16", "", nil, "192.0.2.10:1")
+	resp = modelResponse{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil || rr.Code != http.StatusOK {
+		t.Fatalf("phone query %d %s", rr.Code, rr.Body)
+	}
+	got := map[string]aggregate.Stats{}
+	for _, st := range resp.Tiers {
+		got[st.Tier] = st
+	}
+	if got["exact"].Ratings != 2 || got["class"].Ratings != 3 || got["class"].Cohort != "qualcomm:snapdragon-8:12-16" || got["global"].Ratings != 3 {
+		t.Fatalf("phone tiers %+v", resp.Tiers)
+	}
+
+	rr = do(t, h, "GET", "/v1/aggregates", "", nil, "192.0.2.10:1")
+	var snap aggregate.Snapshot
+	_ = json.Unmarshal(rr.Body.Bytes(), &snap)
+	published := map[string]map[string]int{}
+	for _, m := range snap.Models {
+		cs := map[string]int{}
+		for _, c := range m.Cohorts {
+			if c.Tier == "exact" || c.Ratings < aggregate.MinPublic {
+				t.Errorf("published %+v", c)
+			}
+			cs[c.Tier+" "+c.Cohort] = c.Ratings
+		}
+		published[m.Runtime+"/"+m.Backend] = cs
+	}
+	want := map[string]map[string]int{
+		"llamacpp/metal":  {"family apple:m4-max": 3, "class apple:apple-silicon:32-64": 3, "backend metal:32-64": 3, "global ": 3},
+		"llama.rn/opencl": {"class qualcomm:snapdragon-8:12-16": 3, "backend opencl:12-16": 3, "global ": 3},
+		"llama.rn/metal":  {"family apple:a17-pro": 3, "class apple:a-series:8-12": 3, "backend metal:8-12": 3, "global ": 3},
+		// llama.rn/cpu has one rating, so it is not published at all.
+	}
+	if fmt.Sprint(published) != fmt.Sprint(want) {
+		t.Fatalf("published\n%v\nwant\n%v", published, want)
+	}
+	// A phone key with a computer runtime, or the reverse, is not a query.
+	for _, q := range []string{
+		"runtime=llamacpp&backend=metal&hardware=apple:a17-pro:unified:8-12",
+		"runtime=llama.rn&backend=metal&hardware=apple:m4-max:unified:32-64",
+		"runtime=llama.rn&backend=cuda",
+	} {
+		if rr := do(t, h, "GET", "/v1/models/qwen2.5-coder-7b-instruct/ratings?format=gguf&quantization=Q4_K_M&"+q, "", nil, "192.0.2.10:1"); rr.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", q, rr.Code)
+		}
+	}
+}
+
+// A phone rating that carries a device model name, anywhere, is refused,
+// so the name is never stored or published.
+func TestPhoneDeviceNameRefused(t *testing.T) {
+	s, h := server(t)
+	ok := phoneRating(client(0), 4, "android", "google", "tensor-g3", "cpu", "8-12")
+	for name, body := range map[string]string{
+		"family":       phoneRating(client(0), 4, "android", "google", "pixel-8", "cpu", "8-12"),
+		"samsung code": phoneRating(client(0), 4, "android", "samsung", "sm-s928b", "cpu", "8-12"),
+		"iphone":       phoneRating(client(0), 4, "ios", "apple", "iphone16-2", "metal", "8-12"),
+		"field":        strings.Replace(ok, `"memory_type"`, `"device_model":"Pixel 8","memory_type"`, 1),
+		"top field":    strings.Replace(ok, `"stars"`, `"device":"Pixel 8","stars"`, 1),
+		"app version":  strings.Replace(ok, `"app_version":"1.12.1"`, `"app_version":"Pixel-8"`, 1),
+		"rn version":   strings.Replace(ok, `"version":"0.6.3"`, `"version":"SM-S928B"`, 1),
+	} {
+		if rr := do(t, h, "POST", "/v1/ratings", body, nil, "203.0.113.1:1"); rr.Code < 400 || rr.Code >= 500 {
+			t.Errorf("%s accepted: %d", name, rr.Code)
+		}
+	}
+	rows, err := s.Store.All(t.Context())
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("stored %d rows %v", len(rows), err)
+	}
+}
+
+// Writes are limited per client_id, so one phone cannot use up its carrier
+// NAT's allowance; the per-network limit stays as a backstop.
+func TestClientLimitBehindNAT(t *testing.T) {
+	s, _ := server(t)
+	s.clientWrites = newLimiter(2, time.Hour)
+	s.writes = newLimiter(5, time.Hour)
+	h := s.Handler()
+	nat := "203.0.113.7:1"
+	post := func(cl string, stars int) int {
+		return do(t, h, "POST", "/v1/ratings", phoneRating(cl, stars, "android", "qualcomm", "snapdragon-8-gen-3", "opencl", "12-16"), nil, nat).Code
+	}
+	if post(client(0), 4) != http.StatusCreated || post(client(0), 5) != http.StatusOK {
+		t.Fatal("first writes refused")
+	}
+	// The same phone again, and changing or deleting, count against it.
+	if c := post(client(0), 3); c != http.StatusTooManyRequests {
+		t.Fatalf("third write by one client %d", c)
+	}
+	if rr := do(t, h, "DELETE", "/v1/ratings/x", "", map[string]string{"X-Ratings-Client": client(0)}, "192.0.2.1:1"); rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("delete over the client limit %d", rr.Code)
+	}
+	// Another phone behind the same address is not starved.
+	if c := post(client(1), 4); c != http.StatusCreated {
+		t.Fatalf("second phone %d", c)
+	}
+	if c := post(client(2), 4); c != http.StatusCreated {
+		t.Fatalf("third phone %d", c)
+	}
+	// The network backstop: 5 writes from the address, counting refused ones.
+	if c := post(client(3), 4); c != http.StatusTooManyRequests {
+		t.Fatalf("over the network limit %d", c)
+	}
+}
