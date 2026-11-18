@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # The workflows' actions, so they move off deprecated runtimes (Node 20)
+  # together instead of one warning at a time.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

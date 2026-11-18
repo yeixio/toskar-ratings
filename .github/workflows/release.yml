@@ -5,11 +5,18 @@ on:
 permissions:
   contents: read
   packages: write
+  actions: read
 jobs:
   image:
     runs-on: ${{ fromJSON(vars.TRUSTED_RUNS_ON || '"ubuntu-latest"') }}
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: The tagged commit is green
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # CI passed on main for this commit (.github/scripts/require-green.sh).
+        run: .github/scripts/require-green.sh
       - name: Sign in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Build and push
