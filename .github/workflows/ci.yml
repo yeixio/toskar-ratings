@@ -5,13 +5,19 @@ on:
   pull_request:
 permissions:
   contents: read
+# A new push to a pull request cancels its older run.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # CI_RUNS_ON (an org variable) moves this to self-hosted runners; unset,
   # it stays on GitHub's.
   go:
     runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '"ubuntu-latest"') }}
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v7
         with:
           cache: ${{ !vars.CI_RUNS_ON }}
@@ -27,8 +33,9 @@ jobs:
   # they have Docker, GitHub's until then.
   docker:
     runs-on: ${{ fromJSON(vars.TRUSTED_RUNS_ON || '"ubuntu-latest"') }}
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build the image
         run: docker build -t toskar-ratings:ci .
       - name: The image starts and answers
